@@ -2,6 +2,8 @@
 
 # This file is subject to the terms and conditions defined in file 'LICENSE.txt', which is part of this source code package.
 
+# Check to see if an Office doc has had its compressed VBA source code stomped.
+
 import argparse
 import sys
 import subprocess
@@ -62,11 +64,31 @@ def _get_pcode_ids(pcode):
             else:
                 in_id_section = False
 
+    # These IDs seem to appear in the p-code and not necessarily in
+    # the VBA source code. Filter them out.
+    common_ids = set(["Word",
+                      "VBA",
+                      "Win16",
+                      "Win32",
+                      "Win64",
+                      "Mac",
+                      "VBA6",
+                      "VBA7",
+                      "Project1",
+                      "stdole",
+                      "Project",
+                      "ThisDocument",
+                      "_Evaluate",
+                      "Normal",
+                      "Office",
+                      "Document"])
+                
     # Now filter out the IDs that don't appear in the p-code
     # instructions.
     tmp = set()
     for curr_id in ids:
-        if (curr_id in instructions):
+        if ((curr_id in instructions) and
+            (curr_id not in common_ids)):
             tmp.add(curr_id)
     ids = tmp
 
@@ -130,7 +152,7 @@ def _missing_strs(vba, pcode_strs, verbose=False):
 
     pcode_strs - (set) The string literals defined in the p-code.
     
-    return - (boolean) True if there are string lierals that appear in
+    return - (boolean) True if there are string literals that appear in
     the p-code that do not appear in the decompressed VBA source code,
     False if they match.
     """
@@ -328,7 +350,13 @@ if __name__ == '__main__':
     args = parser.parse_args()
         
     # Check for VBA stomping.
-    if (is_vba_stomped(args.doc, args.verbose)):
-        print "WARNING: File " + args.doc + " is VBA stomped."
-    else:
-        print "File " + args.doc + " is NOT VBA stomped."
+    try:
+        if (is_vba_stomped(args.doc, args.verbose)):
+            print "WARNING: File " + args.doc + " is VBA stomped."
+        else:
+            print "File " + args.doc + " is NOT VBA stomped."
+        sys.exit(0)
+    except ValueError as e:
+        print "ERROR: VBA stomping check of " + str(args.doc) + \
+            " failed. " + str(e)
+        sys.exit(1)

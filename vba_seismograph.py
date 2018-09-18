@@ -98,6 +98,54 @@ def _missing_ids(vba, pcode_ids, verbose=False):
     return missing
 
 ###########################################################################
+def _get_pcode_strs(pcode):
+    """
+    Pull out string literals from the given p-code disassembly.
+
+    pcode - (str) The p-code disassembly.
+
+    return - (set) The set of literal strings.
+    """
+
+    # Look at each line of the disassembly.
+    strs = set()
+    for line in pcode.split("\n"):
+
+        # Is this a string literal instruction?
+        line = line.strip()
+        if (line.startswith("LitStr ")):
+            curr_str = line[line.index('"') + 1:-1]
+            strs.add(curr_str)
+            
+    # Return the string literals.
+    return strs
+
+###########################################################################
+def _missing_strs(vba, pcode_strs, verbose=False):
+    """
+    See if there are any string literals appear in the p-code that do
+    not appear in the decompressed VBA source code.
+
+    vba - (str) The decompressed VBA source code.
+
+    pcode_strs - (set) The string literals defined in the p-code.
+    
+    return - (boolean) True if there are string lierals that appear in
+    the p-code that do not appear in the decompressed VBA source code,
+    False if they match.
+    """
+
+    # Check each string.
+    missing = False
+    for curr_str in pcode_strs:
+        if ((('"' + curr_str + '"') not in vba) and
+            (("'" + curr_str + "'") not in vba)):
+            if (verbose):
+                print "P-code string '" + str(curr_str) + "' is missing."
+            missing = True
+    return missing
+
+###########################################################################
 def detect_stomping_via_pcode(filename, verbose=False):
     """
     Detect VBA stomping by comparing variables, function names, and
@@ -144,17 +192,20 @@ def detect_stomping_via_pcode(filename, verbose=False):
 
     # Check to see if all the function names and variables from the
     # p-code appear in the decompressed VBA source code.
+    stomped = False
     if (_missing_ids(vba, pcode_ids, verbose)):
-        return True
+        stomped = True
 
     # Get the string literals from the p-code.
-
+    pcode_strs = _get_pcode_strs(pcode)
+    
     # Check to see if all the string literals from the p-code appear
     # in the decompressed VBA source code.
-
-    r = False
+    if (_missing_strs(vba, pcode_strs, verbose)):
+        stomped = True
     
-    return r
+    # Return whether the VBA source code was stomped.
+    return stomped
 
 ###########################################################################
 def is_vba_stomped(filename, verbose=False):

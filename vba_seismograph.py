@@ -146,6 +146,53 @@ def _missing_strs(vba, pcode_strs, verbose=False):
     return missing
 
 ###########################################################################
+def _get_pcode_comments(pcode):
+    """
+    Pull out comments from the given p-code disassembly.
+
+    pcode - (str) The p-code disassembly.
+
+    return - (set) The set of comments.
+    """
+
+    # Look at each line of the disassembly.
+    comments = set()
+    for line in pcode.split("\n"):
+
+        # Is this a comment instruction?
+        line = line.strip()
+        if (line.startswith("QuoteRem ")):
+            curr_str = line[line.index('"') + 1:-1]
+            comments.add(curr_str)
+            
+    # Return the comments.
+    return comments
+
+###########################################################################
+def _missing_comments(vba, pcode_comments, verbose=False):
+    """
+    See if there are any comments appear in the p-code that do not
+    appear in the decompressed VBA source code.
+
+    vba - (str) The decompressed VBA source code.
+
+    pcode_comments - (set) The comments defined in the p-code.
+    
+    return - (boolean) True if there are comments that appear in
+    the p-code that do not appear in the decompressed VBA source code,
+    False if they match.
+    """
+
+    # Check each comment.
+    missing = False
+    for curr_str in pcode_comments:
+        if (curr_str not in vba):
+            if (verbose):
+                print "P-code comment '" + str(curr_str) + "' is missing."
+            missing = True
+    return missing
+
+###########################################################################
 def detect_stomping_via_pcode(filename, verbose=False):
     """
     Detect VBA stomping by comparing variables, function names, and
@@ -202,6 +249,14 @@ def detect_stomping_via_pcode(filename, verbose=False):
     # Check to see if all the string literals from the p-code appear
     # in the decompressed VBA source code.
     if (_missing_strs(vba, pcode_strs, verbose)):
+        stomped = True
+
+    # Get the comments from the p-code.
+    pcode_comments = _get_pcode_comments(pcode)
+    
+    # Check to see if all the comments from the p-code appear
+    # in the decompressed VBA source code.
+    if (_missing_comments(vba, pcode_comments, verbose)):
         stomped = True
     
     # Return whether the VBA source code was stomped.

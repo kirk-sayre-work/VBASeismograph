@@ -137,7 +137,7 @@ def _get_pcode_strs(pcode):
         line = line.strip()
         if (line.startswith("LitStr ")):
             curr_str = line[line.index('"') + 1:-1]
-            strs.add(curr_str)
+            strs.add(curr_str.replace('"', '""'))
             
     # Return the string literals.
     return strs

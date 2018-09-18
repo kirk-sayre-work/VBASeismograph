@@ -8,6 +8,10 @@ import argparse
 import sys
 import subprocess
 import os
+import zipfile
+import time
+import os.path
+import shutil
 
 ###########################################################################
 def _get_pcode_ids(pcode):
@@ -215,6 +219,74 @@ def _missing_comments(vba, pcode_comments, verbose=False):
     return missing
 
 ###########################################################################
+def _unzip_office_doc(filename):
+    """
+    Extract the vbaProject.bin macro file from Office 2007+ files if
+    needed.
+
+    filename - (str) The Office doc file name.
+
+    return - (str) The name of the macro file to analyze. This will be
+    a temporary copy of vbaProject.bin for Office 2007+ files and will
+    be the original file name if not given a Office 2007+ file.
+    """
+
+    # Is this an Office 2007+ file?
+    try:
+        file_type = subprocess.check_output(["file", filename])
+        if (("2007+" not in file_type) or
+            ("Microsoft" not in file_type)):
+            return filename            
+    except Exception as e:
+        raise ValueError("Running file on " + filename + \
+                         " failed. " + str(e))
+
+    # If we get here we have a Office 2007+ file. Unzip it.
+    out_dir = None
+    try:
+        zip_ref = zipfile.ZipFile(filename, 'r')
+        millis = int(round(time.time() * 1000))
+        out_dir = filename
+        if ("/" in out_dir):
+            out_dir = out_dir[out_dir.rindex("/" + 1):]
+        out_dir = "/tmp/" + out_dir + "_" + str(millis)
+        zip_ref.extractall(out_dir)
+        zip_ref.close()
+    except Exception as e:
+        raise ValueError("Zip extraction of " + filename + \
+                         " failed. " + str(e))
+
+    # Look for word/vbaProject.bin in the unzipped directory.
+    # TODO: Handle renamed/extra vbaProject.bin files.
+    unzipped_filename = out_dir + "/word/vbaProject.bin"
+    if (os.path.isfile(unzipped_filename)):
+        return unzipped_filename
+    else:
+        raise ValueError(str(unzipped_filename) + " not found after " + \
+                         "unzipping Office 2007+ file " + filename)
+
+###########################################################################
+def _cleanup_office_doc(orig_filename, filename):
+    """
+    Delete the temporary directory where an Office 2007+ file was
+    unzipped if needed.
+
+    orig_filename - The original Office doc file name.
+
+    filename - The file that was analyzed. This could be
+    vbaProject.bin from the unzipped original file.
+    """
+
+    # Is there anything to clean up?
+    if (orig_filename == filename):
+        return
+
+    # Delete the temporary directory of unzipped files.
+    if ("/word/" in filename):
+        tmp_dir = filename[:filename.index("/word/")]
+        shutil.rmtree(tmp_dir)
+    
+###########################################################################
 def detect_stomping_via_pcode(filename, verbose=False):
     """
     Detect VBA stomping by comparing variables, function names, and
@@ -233,12 +305,16 @@ def detect_stomping_via_pcode(filename, verbose=False):
     raises - ValueError, if running sigtool or pcodedmp.py fails.
     """
 
+    # Extract the VBA macro file from Office 2007+ files if needed.
+    orig_filename = filename
+    filename = _unzip_office_doc(filename)
+    
     # Get the p-code disassembly.
     pcode = None
     try:
         pcode = subprocess.check_output(["python", os.environ["PCODEDMP_DIR"] + "/pcodedmp.py", filename])
     except Exception as e:
-        raise ValueError("Running pcodedmp.py on " + filename + \
+        raise ValueError("Running pcodedmp.py on " + orig_filename + \
                          " failed. " + str(e))
     if (verbose):
         print "----------------------------------------------"
@@ -249,7 +325,7 @@ def detect_stomping_via_pcode(filename, verbose=False):
     try:
         vba = subprocess.check_output(["sigtool", "--vba", filename])
     except Exception as e:
-        raise ValueError("Running sigtool on " + filename + \
+        raise ValueError("Running sigtool on " + orig_filename + \
                          " failed. " + str(e))
     if (verbose):
         print "----------------------------------------------"
@@ -280,7 +356,10 @@ def detect_stomping_via_pcode(filename, verbose=False):
     # in the decompressed VBA source code.
     if (_missing_comments(vba, pcode_comments, verbose)):
         stomped = True
-    
+
+    # Clean up extracted 2007+ macro file if needed.
+    _cleanup_office_doc(orig_filename, filename)
+        
     # Return whether the VBA source code was stomped.
     return stomped
 

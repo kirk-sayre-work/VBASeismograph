@@ -12,6 +12,8 @@ import zipfile
 import time
 import os.path
 import shutil
+import tempfile
+import re
 
 ###########################################################################
 def _get_pcode_ids(pcode):
@@ -91,9 +93,29 @@ def _get_pcode_ids(pcode):
     # instructions.
     tmp = set()
     for curr_id in ids:
-        if ((curr_id in instructions) and
-            (curr_id not in common_ids)):
-            tmp.add(curr_id)
+
+        # Skip IDs that are obviously not used or are common.
+        if ((curr_id not in instructions) or
+            (curr_id in common_ids)):
+            continue
+
+        # Make sure the ID string is not embedded in some other
+        # string.
+        pat = "." + curr_id + "."
+        strs = re.findall(pat, instructions)
+        keep = False
+        for curr_str in strs:
+            if ((not curr_str[0].isalnum()) and
+                (not curr_str[len(curr_str) - 1].isalnum())):
+                keep = True
+                break
+        if (not keep):
+            continue
+        
+        # This is a valid ID. Save it.
+        tmp.add(curr_id)
+
+    # Use the filtered IDs.
     ids = tmp
 
     # Return the function names and variables.
@@ -247,9 +269,9 @@ def _unzip_office_doc(filename):
         zip_ref = zipfile.ZipFile(filename, 'r')
         millis = int(round(time.time() * 1000))
         out_dir = filename
-        if ("/" in out_dir):
-            out_dir = out_dir[out_dir.rindex("/" + 1):]
-        out_dir = "/tmp/" + out_dir + "_" + str(millis)
+        if (os.sep in out_dir):
+            out_dir = out_dir[out_dir.rindex(os.sep) + 1:]
+        out_dir = tempfile.gettempdir() + os.sep + out_dir + "_" + str(millis)
         zip_ref.extractall(out_dir)
         zip_ref.close()
     except Exception as e:
@@ -258,7 +280,7 @@ def _unzip_office_doc(filename):
 
     # Look for word/vbaProject.bin in the unzipped directory.
     # TODO: Handle renamed/extra vbaProject.bin files.
-    unzipped_filename = out_dir + "/word/vbaProject.bin"
+    unzipped_filename = os.path.join(out_dir, "word", "vbaProject.bin")
     if (os.path.isfile(unzipped_filename)):
         return unzipped_filename
     else:
@@ -282,8 +304,9 @@ def _cleanup_office_doc(orig_filename, filename):
         return
 
     # Delete the temporary directory of unzipped files.
-    if ("/word/" in filename):
-        tmp_dir = filename[:filename.index("/word/")]
+    subdir = os.sep + "word" + os.sep
+    if (subdir in filename):
+        tmp_dir = filename[:filename.index(subdir)]
         shutil.rmtree(tmp_dir)
     
 ###########################################################################
@@ -312,7 +335,7 @@ def detect_stomping_via_pcode(filename, verbose=False):
     # Get the p-code disassembly.
     pcode = None
     try:
-        pcode = subprocess.check_output(["python", os.environ["PCODEDMP_DIR"] + "/pcodedmp.py", filename])
+        pcode = subprocess.check_output(["python", os.path.join(os.environ["PCODEDMP_DIR"], "pcodedmp.py"), filename])
     except Exception as e:
         raise ValueError("Running pcodedmp.py on " + orig_filename + \
                          " failed. " + str(e))
@@ -398,7 +421,9 @@ if __name__ == '__main__':
             "This is the install directory for pcodedmp.py (https://github.com/bontchev/pcodedmp)."
         sys.exit(1)
     try:
-        subprocess.check_output(["python", os.environ["PCODEDMP_DIR"] + "/pcodedmp.py", "-h"])
+        subprocess.check_output(["python",
+                                 os.path.join(os.environ["PCODEDMP_DIR"], "pcodedmp.py"),
+                                 "-h"])
     except Exception as e:
         print "ERROR: It looks like pcodedmp is not installed. " + str(e) + "\n"
         print "To install pcodedmp do the following:\n"

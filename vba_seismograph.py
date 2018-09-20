@@ -87,6 +87,7 @@ def _get_pcode_ids(pcode):
                       "_Evaluate",
                       "Normal",
                       "Office",
+                      "Add",
                       "UserForm",
                       "Document"])
                 

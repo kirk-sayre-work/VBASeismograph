@@ -87,6 +87,7 @@ def _get_pcode_ids(pcode):
                       "_Evaluate",
                       "Normal",
                       "Office",
+                      "UserForm",
                       "Document"])
                 
     # Now filter out the IDs that don't appear in the p-code
@@ -96,7 +97,8 @@ def _get_pcode_ids(pcode):
 
         # Skip IDs that are obviously not used or are common.
         if ((curr_id not in instructions) or
-            (curr_id in common_ids)):
+            (curr_id in common_ids) or
+            (curr_id.startswith("_B_var_"))):
             continue
 
         # Make sure the ID string is not embedded in some other
@@ -234,7 +236,39 @@ def _missing_comments(vba, pcode_comments, verbose=False):
     # Check each comment.
     missing = False
     for curr_str in pcode_comments:
-        if (curr_str not in vba):
+
+        # Try the easy case (1 line comments) first.
+        if (curr_str in vba):
+            continue
+        
+        # Need to handle multiline comments. We do this by allowing
+        # newlines to appear where spaces appear.
+        pat = curr_str
+        pat = pat.replace("'", " ")
+        pat = pat.replace("\\", "\\\\")
+        pat = pat.replace("(", "\\(")
+        pat = pat.replace(")", "\\)")
+        pat = pat.replace("[", "\\[")
+        pat = pat.replace("]", "\\]")
+        pat = pat.replace("}", "\\}")
+        pat = pat.replace("}", "\\}")
+        pat = pat.replace("+", "\\+")
+        pat = pat.replace("^", "\\^")
+        pat = pat.replace(".", "\\.")
+        pat = pat.replace("$", "\\$")
+        pat = pat.replace("?", "\\?")
+        pat = pat.replace("*", "\\*")
+        pat = pat.replace(",", "\\,")
+        pat = pat.replace("|", "\\|")
+        tmp = ""
+        for i in pat.split(" "):
+            if (len(i) == 0):
+                continue
+            if (len(tmp) > 0):
+                tmp += "[\\s\\r\\n']{1,50}"
+            tmp += i
+        pat = tmp
+        if (re.search(pat, vba, re.MULTILINE) is None):
             if (verbose):
                 print "P-code comment '" + str(curr_str) + "' is missing."
             missing = True
@@ -350,6 +384,8 @@ def detect_stomping_via_pcode(filename, verbose=False):
     except Exception as e:
         raise ValueError("Running sigtool on " + orig_filename + \
                          " failed. " + str(e))
+    vba = vba.replace(chr(0x0d), "")
+    vba = vba.replace("_\n", "\n")
     if (verbose):
         print "----------------------------------------------"
         print vba

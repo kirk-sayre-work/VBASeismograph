@@ -98,23 +98,24 @@ def _get_pcode_ids(pcode):
     for curr_id in ids:
 
         # Skip IDs that are obviously not used or are common.
-        if ((curr_id not in instructions) or
+        if (((instructions is not None) and (curr_id not in instructions)) or
             (curr_id in common_ids) or
             (curr_id.startswith("_B_var_"))):
             continue
 
         # Make sure the ID string is not embedded in some other
         # string.
-        pat = "." + curr_id + "."
-        strs = re.findall(pat, instructions)
-        keep = False
-        for curr_str in strs:
-            if ((not curr_str[0].isalnum()) and
-                (not curr_str[len(curr_str) - 1].isalnum())):
-                keep = True
-                break
-        if (not keep):
-            continue
+        if (instructions is not None):
+            pat = "." + curr_id + "."
+            strs = re.findall(pat, instructions)
+            keep = False
+            for curr_str in strs:
+                if ((not curr_str[0].isalnum()) and
+                    (not curr_str[len(curr_str) - 1].isalnum())):
+                    keep = True
+                    break
+            if (not keep):
+                continue
 
         # It looks like some IDs in the p-code have underscores added
         # to the prefix or suffix of the name. Strip those off so we

@@ -88,6 +88,7 @@ def _get_pcode_ids(pcode):
                       "Normal",
                       "Office",
                       "Add",
+                      "MSForms",
                       "UserForm",
                       "Document"])
                 
@@ -114,6 +115,14 @@ def _get_pcode_ids(pcode):
                 break
         if (not keep):
             continue
+
+        # It looks like some IDs in the p-code have underscores added
+        # to the prefix or suffix of the name. Strip those off so we
+        # can properly match the IDs in the VBA.
+        while (curr_id.startswith("_")):
+            curr_id = curr_id[1:]
+        while (curr_id.endswith("_")):
+            curr_id = curr_id[:-1]
         
         # This is a valid ID. Save it.
         tmp.add(curr_id)

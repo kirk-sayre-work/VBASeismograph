@@ -82,6 +82,8 @@ def _get_pcode_ids(pcode):
                       "VBA7",
                       "Project1",
                       "stdole",
+                      "VBAProject",
+                      "Excel",
                       "Project",
                       "ThisDocument",
                       "_Evaluate",

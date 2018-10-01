@@ -226,6 +226,8 @@ def _get_pcode_comments(pcode):
         line = line.strip()
         if (line.startswith("QuoteRem ")):
             curr_str = line[line.index('"') + 1:-1]
+            if (curr_str.endswith("_")):
+                curr_str = curr_str[-1]
             comments.add(curr_str)
             
     # Return the comments.

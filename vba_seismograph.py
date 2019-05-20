@@ -146,19 +146,19 @@ def _missing_ids(vba, pcode_ids, verbose=False):
 
     pcode_ids - (set) The IDs defined in the p-code.
     
-    return - (boolean) True if there are function names or variables
-    that appear in the p-code that do not appear in the decompressed
-    VBA source code, False if they match.
+    return - (float) % missing items.
     """
 
     # Check each ID.
-    missing = False
+    num_missing = 0.0
     for curr_id in pcode_ids:
         if (curr_id not in vba):
             if (verbose):
                 print "P-code ID '" + str(curr_id) + "' is missing."
-            missing = True
-    return missing
+            num_missing += 1
+    if (len(pcode_ids) == 0):
+        return 0.0
+    return (num_missing / len(pcode_ids))
 
 ###########################################################################
 def _get_pcode_strs(pcode):
@@ -193,20 +193,20 @@ def _missing_strs(vba, pcode_strs, verbose=False):
 
     pcode_strs - (set) The string literals defined in the p-code.
     
-    return - (boolean) True if there are string literals that appear in
-    the p-code that do not appear in the decompressed VBA source code,
-    False if they match.
+    return - (float) % missing items.
     """
 
     # Check each string.
-    missing = False
+    num_missing = 0.0
     for curr_str in pcode_strs:
         if ((('"' + curr_str + '"') not in vba) and
             (("'" + curr_str + "'") not in vba)):
             if (verbose):
                 print "P-code string '" + str(curr_str) + "' is missing."
-            missing = True
-    return missing
+            num_missing += 1
+    if (len(pcode_strs) == 0):
+        return 0.0
+    return (num_missing / len(pcode_strs))
 
 ###########################################################################
 def _get_pcode_comments(pcode):
@@ -243,13 +243,11 @@ def _missing_comments(vba, pcode_comments, verbose=False):
 
     pcode_comments - (set) The comments defined in the p-code.
     
-    return - (boolean) True if there are comments that appear in
-    the p-code that do not appear in the decompressed VBA source code,
-    False if they match.
+    return - (float) % missing items.
     """
 
     # Check each comment.
-    missing = False
+    num_missing = 0.0
     for curr_str in pcode_comments:
 
         # Try the easy case (1 line comments) first.
@@ -286,8 +284,10 @@ def _missing_comments(vba, pcode_comments, verbose=False):
         if (re.search(pat, vba, re.MULTILINE) is None):
             if (verbose):
                 print "P-code comment '" + str(curr_str) + "' is missing."
-            missing = True
-    return missing
+            num_missing += 1
+    if (len(pcode_comments) == 0):
+        return 0.0
+    return (num_missing / len(pcode_comments))
 
 ###########################################################################
 def _unzip_office_doc(filename):
@@ -359,7 +359,7 @@ def _cleanup_office_doc(orig_filename, filename):
         shutil.rmtree(tmp_dir)
     
 ###########################################################################
-def detect_stomping_via_pcode(filename, verbose=False):
+def detect_stomping_via_pcode(filename, verbose=False, sensitivity="medium"):
     """
     Detect VBA stomping by comparing variables, function names, and
     static strings in the Office doc p-code to the same items in the
@@ -370,6 +370,9 @@ def detect_stomping_via_pcode(filename, verbose=False):
 
     verbose - (boolean) If True print out detailed debugging
     information.
+
+    sensitivity - (string) The sensitivity of the VBA stomping check to 
+    perform ("low", "medium", or "high").
 
     return - (boolean) True if the given Office doc has stomped VBA
     source code, False if not.
@@ -395,9 +398,9 @@ def detect_stomping_via_pcode(filename, verbose=False):
     # Get the decompressed VBA source code.
     vba = None
     try:
-        vba = subprocess.check_output(["sigtool", "--vba", filename])
+        vba = subprocess.check_output(["olevba", filename])
     except Exception as e:
-        raise ValueError("Running sigtool on " + orig_filename + \
+        raise ValueError("Running olevba on " + orig_filename + \
                          " failed. " + str(e))
     vba = vba.replace(chr(0x0d), "")
     vba = vba.replace("_\n", "\n")
@@ -405,14 +408,23 @@ def detect_stomping_via_pcode(filename, verbose=False):
         print "----------------------------------------------"
         print vba
         print "----------------------------------------------"
-    
+
+    # Figure out the threshold of missing items to trigger VBA stomping.
+    if (sensitivity == "low"):
+        threshold = .5
+    elif (sensitivity == "medium"):
+        threshold = .3
+    elif (sensitivity == "high"):
+        threshold = .1
+        
     # Get the variable and function names from the p-code.
     pcode_ids = _get_pcode_ids(pcode)
 
     # Check to see if all the function names and variables from the
     # p-code appear in the decompressed VBA source code.
     stomped = False
-    if (_missing_ids(vba, pcode_ids, verbose)):
+    pct_missing_ids = _missing_ids(vba, pcode_ids, verbose)
+    if (pct_missing_ids > threshold):
         stomped = True
 
     # Get the string literals from the p-code.
@@ -420,7 +432,8 @@ def detect_stomping_via_pcode(filename, verbose=False):
     
     # Check to see if all the string literals from the p-code appear
     # in the decompressed VBA source code.
-    if (_missing_strs(vba, pcode_strs, verbose)):
+    pct_missing_strs = _missing_strs(vba, pcode_strs, verbose)
+    if (pct_missing_strs > threshold):
         stomped = True
 
     # Get the comments from the p-code.
@@ -428,17 +441,26 @@ def detect_stomping_via_pcode(filename, verbose=False):
     
     # Check to see if all the comments from the p-code appear
     # in the decompressed VBA source code.
-    if (_missing_comments(vba, pcode_comments, verbose)):
+    pct_missing_comments = _missing_comments(vba, pcode_comments, verbose)
+    if (pct_missing_comments > threshold):
         stomped = True
 
     # Clean up extracted 2007+ macro file if needed.
     _cleanup_office_doc(orig_filename, filename)
+
+    # Print more info if needed.
+    if (verbose):
+        print "\n---------------------------------"
+        print "% Missing IDs:\t\t\t" + str(pct_missing_ids)
+        print "% Missing Strings:\t\t" + str(pct_missing_strs)
+        print "% Missing Comments:\t\t" + str(pct_missing_comments)
+        print "---------------------------------\n"
         
     # Return whether the VBA source code was stomped.
     return stomped
 
 ###########################################################################
-def is_vba_stomped(filename, verbose=False):
+def is_vba_stomped(filename, verbose=False, sensitivity="medium"):
     """
     Check to see if the given Office doc file has had its VBA source
     code stomped.
@@ -449,14 +471,17 @@ def is_vba_stomped(filename, verbose=False):
     verbose - (boolean) If True print out detailed debugging
     information.
 
+    sensitivity - (string) The sensitivity of the VBA stomping check to 
+    perform ("low", "medium", or "high").
+
     return - (boolean) True if the given Office doc has stomped VBA
     source code, False if not.
 
-    raises - ValueError, if running sigtool or pcodedmp.py fails.
+    raises - ValueError, if running olevba or pcodedmp.py fails.
     """
 
     # TODO: For now just detect with 1 method.
-    return detect_stomping_via_pcode(filename, verbose)
+    return detect_stomping_via_pcode(filename, verbose, sensitivity)
     
 ###########################################################################
 ## Main Program
@@ -483,19 +508,21 @@ if __name__ == '__main__':
             "variable to the pcodedmp install directory."
         sys.exit(1)
 
-    # Check ClamAV sigtool.
+    # Check olevba.
     try:
-        subprocess.check_output(["sigtool", "-h"])
+        subprocess.check_output(["olevba", "-h"])
     except Exception as e:
-        print "ERROR: It looks like ClamAV sigtool is not installed. " + str(e) + "\n"
-        print "To install sigtool do the following:\n"
-        print "sudo apt-get install clamav"
+        print "ERROR: It looks like olevba is not installed. " + str(e) + "\n"
+        print "To install olevba do the following:\n"
+        print "pip install oletools"
         sys.exit(1)
 
     # Get the arguments.
     help_msg = "Check to see if a given Office doc file has had its" + \
                " VBA source code stomped."
     parser = argparse.ArgumentParser(description=help_msg)
+    parser.add_argument('-s', '--sensitivity', dest="sensitivity", action="store", default="medium",
+                        help="Sensitivity of check (low, medium, high) (default=%default)")
     parser.add_argument('-v', "--verbose",
                         help="Print debug information.",
                         action='store_true',
@@ -506,7 +533,7 @@ if __name__ == '__main__':
         
     # Check for VBA stomping.
     try:
-        if (is_vba_stomped(args.doc, args.verbose)):
+        if (is_vba_stomped(args.doc, args.verbose, args.sensitivity)):
             print "WARNING: File " + args.doc + " is VBA stomped."
         else:
             print "File " + args.doc + " is NOT VBA stomped."

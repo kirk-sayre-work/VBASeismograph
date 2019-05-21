@@ -12,7 +12,7 @@ developed and tested under Ubuntu 16.04. This is done by checking for:
 ## Installation
 
 VBA Seismograph makes use of two external packages, pcodedmp and
-ClamAV's sigtool. To install these (under Ubuntu):
+olevba. To install these (under Ubuntu):
 
 ### Install pcodedmp
 
@@ -23,15 +23,14 @@ disassembler. To install it do the following:
 git clone https://github.com/bontchev/pcodedmp.git
 ```
 
-### Install ClamAv
+### Install olevba
 
-ClamAV is an open source AV scanner. It contains a utility called
-sigtool that performs (among other things) VBA source code
-decompression for Office documents. To install ClamAV under Ubuntu do
+olevba is a tool for dumping the compressed VBA source code from an
+Office file. To install olevba under Ubuntu do
 the following:
 
 ```
-sudo apt-get install clamav
+sudo pip install oletools
 ```
 
 ### PCODEDMP_DIR Environment Variable

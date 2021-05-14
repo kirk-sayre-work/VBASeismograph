@@ -16,6 +16,8 @@ import tempfile
 import re
 import traceback
 
+py_exe = sys.executable
+
 ###########################################################################
 def _get_pcode_ids(pcode):
     """
@@ -393,7 +395,7 @@ def detect_stomping_via_pcode(filename, verbose=False, sensitivity="medium"):
     # Get the p-code disassembly.
     pcode = None
     try:
-        pcode = subprocess.check_output(["python3", os.path.join(os.environ["PCODEDMP_DIR"], "pcodedmp.py"), filename])
+        pcode = subprocess.check_output([py_exe, os.path.join(os.environ["PCODEDMP_DIR"], "pcodedmp.py"), filename])
         pcode = pcode.decode("utf-8")
     except Exception as e:
         raise ValueError("Running pcodedmp.python {0} failed. {1}".format(orig_filename, e))
@@ -496,9 +498,10 @@ def is_vba_stomped(filename, verbose=False, sensitivity="medium"):
 ###########################################################################
 
 if __name__ == "__main__":
-
     # Check to see if prerequisites are installed.
-
+    if sys.version_info[0] <= 2:
+        print("ERROR: This version of VBASeismograph is for Python 3")
+        sys.exit(1)
     # Check pcodedmp.py
     if "PCODEDMP_DIR" not in os.environ:
         print(
@@ -506,7 +509,7 @@ if __name__ == "__main__":
         )
         sys.exit(1)
     try:
-        subprocess.check_output(["python3", os.path.join(os.environ["PCODEDMP_DIR"], "pcodedmp.py"), "-h"])
+        subprocess.check_output([py_exe, os.path.join(os.environ["PCODEDMP_DIR"], "pcodedmp.py"), "-h"])
     except Exception as e:
         print("ERROR: It looks like pcodedmp is not installed. {0}\n".format(e))
         print("To install pcodedmp do the following:\n")

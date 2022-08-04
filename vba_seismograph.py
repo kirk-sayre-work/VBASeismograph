@@ -14,6 +14,7 @@ import os.path
 import shutil
 import tempfile
 import re
+from oletools import olevba
 
 ###########################################################################
 def _get_pcode_ids(pcode):
@@ -26,49 +27,17 @@ def _get_pcode_ids(pcode):
     return - (set) The set of function and variable names.
     """
 
-    # Look at each line of the disassembly.
-    ids = set()
-    in_id_section = False
-    skip = False
-    instructions = None
-    for line in pcode.split("\n"):
+    # Get all IDs from raw pcodedmp.
+    id_regex = re.compile("\n[0-9|A-F]{4}: .*")
+    ids = re.findall(id_regex, pcode)
+    ids = set(pcode_id.split(": ")[1] for pcode_id in ids)
 
-        # Should we skip this line?
-        if (skip):
-            skip = False
-            continue
-        
-        # Is this the start of the ID section?
-        if (line == "Identifiers:"):
-            in_id_section = True
-            # Skip the next blank line.
-            skip = True
-            continue
-
-        # Is this the start of the instruction disassembly?
-        if (line.startswith("Line #") and (instructions is None)):
-
-            # Start saving instructions.
-            instructions = ""
-            continue
-        
-        # Is this an instruction?
-        if (instructions is not None):
-            instructions += line + "\n"
-            continue
-        
-        # Are we saving IDs?
-        if (in_id_section):
-
-            # Is this an ID line?
-            if (":" in line):
-                curr_id = line[line.index(":") + 1:].strip()
-                ids.add(curr_id)
-                continue
-
-            # Done with ID section?
-            else:
-                in_id_section = False
+    # Get the pcode instruction part from raw pcodedmp.
+    instruction_regex = re.compile("Line #[0-9]{1,6}:\n(\t.*\n)*")
+    pcode_iterator = re.finditer(instruction_regex, pcode)
+    instructions = "\n".join([match.group().replace("\t", "").split(":", 1)[1].strip("\n")
+                              for match in pcode_iterator
+                              if len(match.group().replace("\t", "").split(":", 1)[1].strip("\n")) > 0])
 
     # These IDs seem to appear in the p-code and not necessarily in
     # the VBA source code. Filter them out.
@@ -395,15 +364,27 @@ def detect_stomping_via_pcode(filename, verbose=False, sensitivity="medium"):
         print "----------------------------------------------"
         print pcode
     
-    # Get the decompressed VBA source code.
-    vba = None
+    # Get decompressed VBA source code
     try:
-        vba = subprocess.check_output(["olevba", filename])
+        vba_parser = olevba.VBA_Parser_CLI(filename=file, disable_pcode=True)
+        vba = vba_parser.process_file_json(show_decoded_strings=False,
+                                           display_code=False,
+                                           hide_attributes=True,
+                                           vba_code_only=True,
+                                           show_deobfuscated_code=False,
+                                           deobfuscate=False,
+                                           show_pcode=False,
+                                           no_xlm=True)
     except Exception as e:
-        raise ValueError("Running olevba on " + orig_filename + \
-                         " failed. " + str(e))
-    vba = vba.replace(chr(0x0d), "")
-    vba = vba.replace("_\n", "\n")
+        # Catch 'NoneType' object has no attribute 'splitlines' error message
+        # This happens if VBA macro source code is completely wiped out and therefore empty
+        if isinstance(e, olevba.ProcessingError) and ('NoneType' in str(e.orig_exc) and 'splitlines' in str(e.orig_exc)):
+            return ""
+        else:
+            raise ValueError("Running olevba failed. " + str(e))
+
+    vba = "".join([macro['code'] for macro in vba['macros'] if len(macro['code']) > 0])
+
     if (verbose):
         print "----------------------------------------------"
         print vba
